@@ -1,0 +1,29 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Profiles: any signed-in user can READ them (needed for the chat list
+    // and search); only the owner can create / edit / delete their own.
+    match /users/{uid} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null && request.auth.uid == uid;
+    }
+
+    // Chats: the room id is "<uidA>_<uidB>", so only its two participants
+    // may touch it.
+    match /chat_rooms/{roomId}/messages/{messageId} {
+      allow read: if request.auth != null
+                  && request.auth.uid in roomId.split('_');
+
+      allow create: if request.auth != null
+                    && request.auth.uid in roomId.split('_')
+                    && request.resource.data.senderId == request.auth.uid;
+
+      // The receiver may only flip `isRead` (the "Seen" tick).
+      allow update: if request.auth != null
+                    && request.auth.uid == resource.data.receiverId
+                    && request.resource.data.diff(resource.data)
+                         .affectedKeys().hasOnly(['isRead']);
+    }
+  }
+}
